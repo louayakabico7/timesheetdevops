@@ -2,6 +2,7 @@ services:
   jenkins:
     image: jenkins/jenkins:lts-jdk17
     container_name: jenkins
+    user: root
     ports:
       - "8082:8080"
       - "50000:50000"
