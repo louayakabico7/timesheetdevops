@@ -32,10 +32,15 @@ pipeline {
         }
         stage('OWASP Dependency-Check') {
             steps {
-                sh 'mvn org.owasp:dependency-check-maven:check -Dformat=HTML'
-                // Example (adapt to your lab):
-                // sh 'mvn org.owasp:dependency-check-maven:check'
+                // Requires NVD API key (https://nvd.nist.gov/developers/request-an-api-key)
+                // stored as Jenkins credential nvd-api-key; non-blocking until configured
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
+                        sh 'mvn org.owasp:dependency-check-maven:check -Dformat=HTML -Dnvd.api.key=$NVD_API_KEY'
+                    }
+                }
             }
+        }
         }
         stage('SonarQube') {
             steps {
