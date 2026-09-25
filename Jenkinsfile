@@ -51,7 +51,10 @@ pipeline {
         stage('Publish Artifact to Nexus') {
             steps {
                 // pom.xml points to localhost:8081, but inside Jenkins container use nexus hostname
-                sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploymentRepo::default::http://nexus:8081/repository/maven-releases/'
+                // Non-blocking until Nexus deploymentRepo credentials (nexus-creds) are configured (401 fix pending)
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploymentRepo::default::http://nexus:8081/repository/maven-releases/'
+                }
             }
         }
         stage('Docker Build') {
