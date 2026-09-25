@@ -6,7 +6,7 @@ pipeline {
     environment {
         IMAGE_NAME = 'alae123alae/timesheet'
         IMAGE_TAG = "${BUILD_NUMBER}"
-        EMAIL_TO = 'YOUR_EMAIL@example.com'
+        EMAIL_TO = 'sabeel.agtn@gmail.com'
     }
     stages {
         stage('Checkout') {
@@ -38,8 +38,9 @@ pipeline {
         }
         stage('SonarQube') {
             steps {
-                // Requires SonarQube server configured in Jenkins + token in credentials
-                sh 'mvn sonar:sonar'
+                withSonarQubeEnv('Sonar') {
+                    sh 'mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.9.1.2184:sonar'
+                }
             }
         }
         stage('Package') {
@@ -49,8 +50,8 @@ pipeline {
         }
         stage('Publish Artifact to Nexus') {
             steps {
-                // pom.xml distributionManagement -> http://localhost:8081/repository/maven-releases/
-                sh 'mvn deploy -DskipTests'
+                // pom.xml points to localhost:8081, but inside Jenkins container use nexus hostname
+                sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploymentRepo::default::http://nexus:8081/repository/maven-releases/'
             }
         }
         stage('Docker Build') {
