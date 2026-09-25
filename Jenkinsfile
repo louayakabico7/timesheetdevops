@@ -2,7 +2,6 @@ pipeline {
     agent any
     tools {
         maven 'M3'
-        jdk 'JDK17'
     }
     environment {
         IMAGE_NAME = 'alae123alae/timesheet'
