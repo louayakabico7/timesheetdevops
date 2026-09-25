@@ -32,7 +32,7 @@ pipeline {
         }
         stage('OWASP Dependency-Check') {
             steps {
-                echo 'OWASP Dependency-Check: insert the exact command/plugin used by your class here.'
+                sh 'mvn org.owasp:dependency-check-maven:check -Dformat=HTML'
                 // Example (adapt to your lab):
                 // sh 'mvn org.owasp:dependency-check-maven:check'
             }
