@@ -52,9 +52,24 @@ pipeline {
         stage('Publish Artifact to Nexus') {
             steps {
                 // pom.xml points to localhost:8081, but inside Jenkins container use nexus hostname
-                // Non-blocking until Nexus deploymentRepo credentials (nexus-creds) are configured (401 fix pending)
+                // Requires Jenkins credential nexus-creds (Nexus admin user)
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploymentRepo::default::http://nexus:8081/repository/maven-releases/'
+                    withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                        sh '''
+                            cat > nexus-settings.xml <<EOF
+<settings>
+  <servers>
+    <server>
+      <id>deploymentRepo</id>
+      <username>$NEXUS_USER</username>
+      <password>$NEXUS_PASS</password>
+    </server>
+  </servers>
+</settings>
+EOF
+                            mvn -s nexus-settings.xml deploy -DskipTests -DaltDeploymentRepository=deploymentRepo::default::http://nexus:8081/repository/maven-releases/
+                        '''
+                    }
                 }
             }
         }
@@ -121,6 +136,13 @@ pipeline {
                 to: "${EMAIL_TO}",
                 subject: "ABORTED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: "Pipeline ABORTED: ${env.BUILD_URL}"
+            )
+        }
+        unstable {
+            emailext(
+                to: "${EMAIL_TO}",
+                subject: "UNSTABLE: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Pipeline UNSTABLE: ${env.BUILD_URL}"
             )
         }
         always {
