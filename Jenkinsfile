@@ -7,6 +7,7 @@ pipeline {
         IMAGE_NAME = 'alae123alae/timesheet'
         IMAGE_TAG = "${BUILD_NUMBER}"
         EMAIL_TO = 'sabeel.agtn@gmail.com'
+        KUBECONFIG = '/var/jenkins_home/.kube/config'
     }
     stages {
         stage('Checkout') {

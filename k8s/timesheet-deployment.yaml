@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: timesheet
-          image: khadijabenjaafar/timesheet:1.0
+          image: alae123alae/timesheet:1.0
           ports:
             - containerPort: 8082
           envFrom:

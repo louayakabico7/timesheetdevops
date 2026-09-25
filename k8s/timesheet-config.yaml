@@ -4,5 +4,5 @@ metadata:
   name: timesheet-config
   namespace: chap4-khadijabenjaafar-4nids3
 data:
-  SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/timesheet
+  SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/timesheet-devops-db?useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC
   SPRING_DATASOURCE_USERNAME: root
