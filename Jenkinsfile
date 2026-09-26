@@ -18,6 +18,8 @@ pipeline {
         stage('Clean') {
             steps {
                 sh 'mvn clean'
+                // Stamp a unique version per build: maven-releases rejects re-deploying version 1.0 (HTTP 400)
+                sh 'mvn versions:set -DnewVersion=1.0.${BUILD_NUMBER} -DgenerateBackupPoms=false'
             }
         }
         stage('Compile') {
@@ -33,10 +35,11 @@ pipeline {
         stage('OWASP Dependency-Check') {
             steps {
                 // Requires NVD API key (https://nvd.nist.gov/developers/request-an-api-key)
-                // stored as Jenkins credential nvd-api-key; non-blocking until configured
+                // stored as Jenkins secret-text credential 'nvc-api-key'; key passed via env var
+                // (dependency-check 13.x reads nvdApiKeyEnvironmentVariable; -Dnvd.api.key was removed)
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
-                        sh 'mvn org.owasp:dependency-check-maven:check -Dformat=HTML -Dnvd.api.key=$NVD_API_KEY'
+                    withCredentials([string(credentialsId: 'nvc-api-key', variable: 'NVD_API_KEY')]) {
+                        sh 'mvn org.owasp:dependency-check-maven:13.0.0:check -Dformat=HTML -DfailBuildOnCVSS=11 -DnvdApiKeyEnvironmentVariable=NVD_API_KEY'
                     }
                 }
             }
@@ -151,6 +154,8 @@ EOF
         }
         always {
             echo 'Post Actions completed.'
+            // versions:set modified pom.xml; restore it so the next checkout stays clean
+            sh 'git checkout -- pom.xml || true'
         }
     }
 }
