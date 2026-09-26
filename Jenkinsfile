@@ -41,7 +41,6 @@ pipeline {
                 }
             }
         }
-        }
         stage('SonarQube') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
