@@ -147,14 +147,28 @@ EOF
                     set -e
                     VOL=$(docker inspect jenkins --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Name}}{{end}}{{end}}')
                     pkill -f 'port-forward svc/timesheet-service' 2>/dev/null || true
-                    kubectl -n chap4-khadijabenjaafar-4nids3 port-forward svc/timesheet-service 30007:8080 > /tmp/zap-pf.log 2>&1 &
-                    PF=$!
+                    # make sure this build's rollout finished and the service has a ready endpoint
+                    kubectl -n chap4-khadijabenjaafar-4nids3 rollout status deployment/timesheet-dep --timeout=120s || true
+                    k=0
+                    until [ -n "$(kubectl -n chap4-khadijabenjaafar-4nids3 get endpoints timesheet-service -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)" ]; do
+                        k=$((k+1))
+                        if [ $k -ge 30 ]; then echo 'service has no ready endpoint'; exit 1; fi
+                        sleep 2
+                    done
+                    # port-forward; restart it if it dies (it can attach to a pod that is being replaced)
+                    PF=0
+                    start_pf() {
+                        kubectl -n chap4-khadijabenjaafar-4nids3 port-forward svc/timesheet-service 30007:8080 >> /tmp/zap-pf.log 2>&1 &
+                        PF=$!
+                    }
+                    start_pf
                     trap 'kill $PF 2>/dev/null || true' EXIT
                     i=0
                     until curl -s -o /dev/null -m 2 http://localhost:30007/timesheet-devops/user/retrieve-all-users; do
+                        if ! kill -0 $PF 2>/dev/null; then echo 'port-forward died, restarting...'; start_pf; fi
                         i=$((i+1))
-                        if [ $i -ge 30 ]; then echo 'app not reachable through port-forward'; cat /tmp/zap-pf.log; exit 1; fi
-                        sleep 1
+                        if [ $i -ge 45 ]; then echo 'app not reachable through port-forward'; cat /tmp/zap-pf.log; exit 1; fi
+                        sleep 2
                     done
                     docker run --rm --network container:jenkins --mount type=volume,src=$VOL,dst=/zap/wrk zaproxy/zap-stable:2.17.0 \
                         zap-baseline.py -t http://localhost:30007/timesheet-devops/user/retrieve-all-users \
