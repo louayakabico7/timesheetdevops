@@ -15,6 +15,25 @@ pipeline {
                 checkout scm
             }
         }
+        stage('Secret Scan (Gitleaks)') {
+            steps {
+                // Post-commit gate: same scan as the local pre-commit hook, but bypass-proof.
+                // Runs as a pinned container; mounts only jenkins_home (not the Docker socket).
+                sh '''
+                    VOL=$(docker inspect jenkins --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Name}}{{end}}{{end}}')
+                    docker run --rm --mount type=volume,src=$VOL,dst=/var/jenkins_home -w "$WORKSPACE" zricethezav/gitleaks:v8.30.1 git --redact --no-banner
+                '''
+            }
+        }
+        stage('SAST (Semgrep)') {
+            steps {
+                // Static analysis on the checked-out source; fails the build on findings
+                sh '''
+                    VOL=$(docker inspect jenkins --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Name}}{{end}}{{end}}')
+                    docker run --rm --mount type=volume,src=$VOL,dst=/var/jenkins_home -w "$WORKSPACE" semgrep/semgrep:1.178.0 semgrep scan --config=p/ci --config=p/security-audit --quiet --error .
+                '''
+            }
+        }
         stage('Clean') {
             steps {
                 sh 'mvn clean'
