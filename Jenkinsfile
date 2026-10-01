@@ -136,6 +136,38 @@ EOF
                 sh 'kubectl -n chap4-khadijabenjaafar-4nids3 rollout status deployment/timesheet-dep --timeout=120s || true'
             }
         }
+        stage('DAST (ZAP)') {
+            steps {
+                // Black-box scan of the RUNNING app (SAST/SCA can only see the code).
+                // 1. port-forward the k8s Service onto localhost of this container
+                // 2. ZAP container shares our network namespace (--network container:jenkins)
+                //    so it reaches http://localhost:30007 ...
+                // -I: only FAIL-level findings break the build, warnings are reported
+                sh '''
+                    set -e
+                    VOL=$(docker inspect jenkins --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Name}}{{end}}{{end}}')
+                    pkill -f 'port-forward svc/timesheet-service' 2>/dev/null || true
+                    kubectl -n chap4-khadijabenjaafar-4nids3 port-forward svc/timesheet-service 30007:8080 > /tmp/zap-pf.log 2>&1 &
+                    PF=$!
+                    trap 'kill $PF 2>/dev/null || true' EXIT
+                    i=0
+                    until curl -s -o /dev/null -m 2 http://localhost:30007/timesheet-devops/user/retrieve-all-users; do
+                        i=$((i+1))
+                        if [ $i -ge 30 ]; then echo 'app not reachable through port-forward'; cat /tmp/zap-pf.log; exit 1; fi
+                        sleep 1
+                    done
+                    docker run --rm --network container:jenkins --mount type=volume,src=$VOL,dst=/zap/wrk zaproxy/zap-stable:2.17.0 \
+                        zap-baseline.py -t http://localhost:30007/timesheet-devops/user/retrieve-all-users \
+                        -r zap-report.html -m 1 -I -s
+                    mv -f /var/jenkins_home/zap-report.html "$WORKSPACE/zap-report.html"
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'zap-report.html', allowEmptyArchive: true
+                }
+            }
+        }
         stage('Prometheus') {
             steps {
                 echo 'Verify monitoring/metrics availability (Prometheus :9090, Grafana :3000). Monitoring stack runs independently.'
