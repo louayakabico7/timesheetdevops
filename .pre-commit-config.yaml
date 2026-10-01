@@ -1,0 +1,26 @@
+# Pre-commit gates: fast local checks run on `git commit`.
+# Heavier SAST (Semgrep) runs on `git push` (pre-push stage).
+# CI (Jenkins) remains the authoritative gate: OWASP Dependency-Check + SonarQube.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks-system
+        pass_filenames: false
+
+  - repo: https://github.com/semgrep/semgrep
+    rev: v1.178.0
+    hooks:
+      - id: semgrep
+        args: ['--config=p/ci', '--config=p/security-audit', '--error', '--quiet']
+        stages: [pre-push]
