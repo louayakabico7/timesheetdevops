@@ -30,7 +30,7 @@ pipeline {
                 // Static analysis on the checked-out source; fails the build on findings
                 sh '''
                     VOL=$(docker inspect jenkins --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Name}}{{end}}{{end}}')
-                    docker run --rm --mount type=volume,src=$VOL,dst=/var/jenkins_home -w "$WORKSPACE" semgrep/semgrep:1.178.0 semgrep scan --config=p/ci --config=p/security-audit --quiet --error .
+                    docker run --rm --mount type=volume,src=$VOL,dst=/var/jenkins_home -w "$WORKSPACE" semgrep/semgrep:1.178.0 semgrep scan --config=p/ci --config=p/security-audit --quiet --error --exclude zap-report.html --exclude target .
                 '''
             }
         }
