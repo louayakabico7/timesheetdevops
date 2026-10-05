@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: timesheet-service
-  namespace: chap4-khadijabenjaafar-4nids3
+  namespace: louaysalim5nids3
 spec:
   type: NodePort
   selector:

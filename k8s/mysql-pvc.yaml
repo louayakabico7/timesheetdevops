@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mysql-pvc
-  namespace: chap4-khadijabenjaafar-4nids3
+  namespace: louaysalim5nids3
 spec:
   accessModes:
     - ReadWriteOnce

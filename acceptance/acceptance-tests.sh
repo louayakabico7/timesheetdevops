@@ -3,7 +3,7 @@
 # Acceptance tests: black-box business checks against a RUNNING deployment.
 #
 #   usage: acceptance-tests.sh [namespace] [service] [local-port]
-#     e.g. acceptance-tests.sh chap4-khadijabenjaafar-4nids3 timesheet-service 30009
+#     e.g. acceptance-tests.sh louaysalim5nids3 timesheet-service 30009
 #
 # Business contract tested (/timesheet-devops/user):
 #   1. list users        GET    /retrieve-all-users    -> 200
@@ -19,7 +19,7 @@
 # ---------------------------------------------------------------------------
 set -u
 
-NS=${1:-chap4-khadijabenjaafar-4nids3}
+NS=${1:-louaysalim5nids3}
 SVC=${2:-timesheet-service}
 LP=${3:-30009}
 API="http://localhost:${LP}/timesheet-devops/user"

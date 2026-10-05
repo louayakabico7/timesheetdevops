@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mysql
-  namespace: chap4-khadijabenjaafar-4nids3
+  namespace: louaysalim5nids3
 spec:
   replicas: 1
   selector:

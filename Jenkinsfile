@@ -139,20 +139,20 @@ EOF
         }
         stage('Kubernetes Deploy') {
             steps {
-                // Manifests in k8s/ use namespace chap4-khadijabenjaafar-4nids3 and image khadijabenjaafar/timesheet:1.0
+                // Manifests in k8s/ use namespace louaysalim5nids3 and image alae123alae/timesheet:1.0
                 // Update image to the one just built, then apply:
                 sh '''
-                    kubectl create namespace chap4-khadijabenjaafar-4nids3 --dry-run=client -o yaml | kubectl apply -f -
+                    kubectl create namespace louaysalim5nids3 --dry-run=client -o yaml | kubectl apply -f -
                     kubectl apply -f k8s/
-                    kubectl -n chap4-khadijabenjaafar-4nids3 set image deployment/timesheet-dep timesheet=${IMAGE_NAME}:${IMAGE_TAG} || true
+                    kubectl -n louaysalim5nids3 set image deployment/timesheet-dep timesheet=${IMAGE_NAME}:${IMAGE_TAG} || true
                 '''
             }
         }
         stage('Kubernetes Verification') {
             steps {
-                sh 'kubectl -n chap4-khadijabenjaafar-4nids3 get pods'
-                sh 'kubectl -n chap4-khadijabenjaafar-4nids3 get deployments'
-                sh 'kubectl -n chap4-khadijabenjaafar-4nids3 rollout status deployment/timesheet-dep --timeout=120s || true'
+                sh 'kubectl -n louaysalim5nids3 get pods'
+                sh 'kubectl -n louaysalim5nids3 get deployments'
+                sh 'kubectl -n louaysalim5nids3 rollout status deployment/timesheet-dep --timeout=120s || true'
             }
         }
         stage('DAST (ZAP)') {
@@ -167,9 +167,9 @@ EOF
                     VOL=$(docker inspect jenkins --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Name}}{{end}}{{end}}')
                     pkill -f 'port-forward svc/timesheet-service' 2>/dev/null || true
                     # make sure this build's rollout finished and the service has a ready endpoint
-                    kubectl -n chap4-khadijabenjaafar-4nids3 rollout status deployment/timesheet-dep --timeout=120s || true
+                    kubectl -n louaysalim5nids3 rollout status deployment/timesheet-dep --timeout=120s || true
                     k=0
-                    until [ -n "$(kubectl -n chap4-khadijabenjaafar-4nids3 get endpoints timesheet-service -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)" ]; do
+                    until [ -n "$(kubectl -n louaysalim5nids3 get endpoints timesheet-service -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)" ]; do
                         k=$((k+1))
                         if [ $k -ge 30 ]; then echo 'service has no ready endpoint'; exit 1; fi
                         sleep 2
@@ -177,7 +177,7 @@ EOF
                     # port-forward; restart it if it dies (it can attach to a pod that is being replaced)
                     PF=0
                     start_pf() {
-                        kubectl -n chap4-khadijabenjaafar-4nids3 port-forward svc/timesheet-service 30007:8080 >> /tmp/zap-pf.log 2>&1 &
+                        kubectl -n louaysalim5nids3 port-forward svc/timesheet-service 30007:8080 >> /tmp/zap-pf.log 2>&1 &
                         PF=$!
                     }
                     start_pf
@@ -204,7 +204,7 @@ EOF
         stage('Acceptance') {
             steps {
                 // automated acceptance: business behaviour of the DEPLOYED staging app
-                sh 'sh acceptance/acceptance-tests.sh chap4-khadijabenjaafar-4nids3 timesheet-service 30009'
+                sh 'sh acceptance/acceptance-tests.sh louaysalim5nids3 timesheet-service 30009'
                 // human sign-off: nothing reaches production without it; also record WHO approved
                 timeout(time: 15, unit: 'MINUTES') {
                     script {
@@ -225,21 +225,21 @@ EOF
                 // Manifests are re-namespaced on the fly (single source of truth, no duplicate yaml).
                 sh '''
                     set -e
-                    kubectl create namespace chap4-khadijabenjaafar-prod --dry-run=client -o yaml | kubectl apply -f -
+                    kubectl create namespace louaysalim5nids3-prod --dry-run=client -o yaml | kubectl apply -f -
                     for f in k8s/*.yaml; do
-                        sed -e 's/chap4-khadijabenjaafar-4nids3/chap4-khadijabenjaafar-prod/g' \
+                        sed -e 's/louaysalim5nids3/louaysalim5nids3-prod/g' \
                             -e 's/nodePort: 30007/nodePort: 30008/' "$f" | kubectl apply -f -
                     done
-                    kubectl -n chap4-khadijabenjaafar-prod set image deployment/timesheet-dep timesheet=${IMAGE_NAME}:${IMAGE_TAG}
-                    if ! kubectl -n chap4-khadijabenjaafar-prod rollout status deployment/timesheet-dep --timeout=240s; then
+                    kubectl -n louaysalim5nids3-prod set image deployment/timesheet-dep timesheet=${IMAGE_NAME}:${IMAGE_TAG}
+                    if ! kubectl -n louaysalim5nids3-prod rollout status deployment/timesheet-dep --timeout=240s; then
                         echo 'production rollout FAILED - rolling back to the previous release'
-                        kubectl -n chap4-khadijabenjaafar-prod rollout undo deployment/timesheet-dep || true
+                        kubectl -n louaysalim5nids3-prod rollout undo deployment/timesheet-dep || true
                         exit 1
                     fi
-                    kubectl -n chap4-khadijabenjaafar-prod get pods
+                    kubectl -n louaysalim5nids3-prod get pods
                 '''
                 // production must behave exactly like what acceptance signed off
-                sh 'sh acceptance/acceptance-tests.sh chap4-khadijabenjaafar-prod timesheet-service 30010'
+                sh 'sh acceptance/acceptance-tests.sh louaysalim5nids3-prod timesheet-service 30010'
             }
         }
         stage('Config Safety Check') {
@@ -247,14 +247,14 @@ EOF
                 // class practice "Configuration Safety Checks": the LIVE config of both
                 // environments must match what this git repo declares (image, replicas,
                 // nodePorts, exposed services, secrets present)
-                sh 'sh scripts/config-safety-check.sh ${IMAGE_NAME}:${IMAGE_TAG} chap4-khadijabenjaafar-4nids3 chap4-khadijabenjaafar-prod'
+                sh 'sh scripts/config-safety-check.sh ${IMAGE_NAME}:${IMAGE_TAG} louaysalim5nids3 louaysalim5nids3-prod'
             }
         }
         stage('Security Smoke Test (ZAP)') {
             steps {
                 // class practice "Security Smoke Tests": ZAP Baseline against the
                 // RELEASED production app, right after release
-                sh 'sh scripts/zap-scan.sh chap4-khadijabenjaafar-prod timesheet-service 30011 zap-report-prod.html'
+                sh 'sh scripts/zap-scan.sh louaysalim5nids3-prod timesheet-service 30011 zap-report-prod.html'
             }
             post {
                 always {
@@ -279,7 +279,7 @@ EOF
                     echo "targets: $UP up, $DOWN down"
                     if [ "$UP" -lt 1 ]; then echo 'no scrape target is up'; exit 1; fi
                     echo '--- Kubernetes workloads (staging + production) ---'
-                    for ns in chap4-khadijabenjaafar-4nids3 chap4-khadijabenjaafar-prod; do
+                    for ns in louaysalim5nids3 louaysalim5nids3-prod; do
                         kubectl -n $ns get pods
                         bad=$(kubectl -n $ns get pods --no-headers | awk '$2 != "1/1" || $3 != "Running"' | wc -l)
                         if [ "$bad" -ne 0 ]; then echo "namespace $ns has $bad pod(s) not ready"; exit 1; fi
