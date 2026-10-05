@@ -182,9 +182,63 @@ EOF
                 }
             }
         }
-        stage('Prometheus') {
+        stage('Acceptance') {
             steps {
-                echo 'Verify monitoring/metrics availability (Prometheus :9090, Grafana :3000). Monitoring stack runs independently.'
+                // automated acceptance: business behaviour of the DEPLOYED staging app
+                sh 'sh acceptance/acceptance-tests.sh chap4-khadijabenjaafar-4nids3 timesheet-service 30009'
+                // human sign-off: nothing reaches production without it
+                timeout(time: 15, unit: 'MINUTES') {
+                    input message: "Acceptance sign-off: promote build #${BUILD_NUMBER} to production?", ok: 'Accept for production'
+                }
+            }
+        }
+        stage('Production') {
+            steps {
+                // promote the SAME image tag to an isolated production namespace.
+                // Manifests are re-namespaced on the fly (single source of truth, no duplicate yaml).
+                sh '''
+                    set -e
+                    kubectl create namespace chap4-khadijabenjaafar-prod --dry-run=client -o yaml | kubectl apply -f -
+                    for f in k8s/*.yaml; do
+                        sed -e 's/chap4-khadijabenjaafar-4nids3/chap4-khadijabenjaafar-prod/g' \
+                            -e 's/nodePort: 30007/nodePort: 30008/' "$f" | kubectl apply -f -
+                    done
+                    kubectl -n chap4-khadijabenjaafar-prod set image deployment/timesheet-dep timesheet=${IMAGE_NAME}:${IMAGE_TAG}
+                    if ! kubectl -n chap4-khadijabenjaafar-prod rollout status deployment/timesheet-dep --timeout=240s; then
+                        echo 'production rollout FAILED - rolling back to the previous release'
+                        kubectl -n chap4-khadijabenjaafar-prod rollout undo deployment/timesheet-dep || true
+                        exit 1
+                    fi
+                    kubectl -n chap4-khadijabenjaafar-prod get pods
+                '''
+                // production must behave exactly like what acceptance signed off
+                sh 'sh acceptance/acceptance-tests.sh chap4-khadijabenjaafar-prod timesheet-service 30010'
+            }
+        }
+        stage('Operation') {
+            steps {
+                // operational readiness of the RUNNING system:
+                // monitoring stack must answer and every pod in staging + production must be ready
+                sh '''
+                    set -e
+                    echo '--- Prometheus ---'
+                    if curl -sf -m 10 http://prometheus:9090/-/ready > /dev/null; then echo 'prometheus: ready'; else echo 'prometheus NOT ready'; exit 1; fi
+                    echo '--- Grafana ---'
+                    if curl -sf -m 10 http://grafana:3000/api/health; then echo ''; else echo 'grafana NOT healthy'; exit 1; fi
+                    echo '--- Prometheus scrape targets UP ---'
+                    TARGETS=$(curl -sf -m 10 http://prometheus:9090/api/v1/targets) || { echo 'cannot query prometheus targets'; exit 1; }
+                    UP=$(echo "$TARGETS" | grep -o '"health":"up"' | wc -l)
+                    DOWN=$(echo "$TARGETS" | grep -o '"health":"down"' | wc -l)
+                    echo "targets: $UP up, $DOWN down"
+                    if [ "$UP" -lt 1 ]; then echo 'no scrape target is up'; exit 1; fi
+                    echo '--- Kubernetes workloads (staging + production) ---'
+                    for ns in chap4-khadijabenjaafar-4nids3 chap4-khadijabenjaafar-prod; do
+                        kubectl -n $ns get pods
+                        bad=$(kubectl -n $ns get pods --no-headers | awk '$2 != "1/1" || $3 != "Running"' | wc -l)
+                        if [ "$bad" -ne 0 ]; then echo "namespace $ns has $bad pod(s) not ready"; exit 1; fi
+                    done
+                    echo 'operation checks passed'
+                '''
             }
         }
     }
