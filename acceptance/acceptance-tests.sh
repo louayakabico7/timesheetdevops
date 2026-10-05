@@ -77,7 +77,7 @@ expect_contains() {
     esac
 }
 expect_empty() {
-    if [ -z "$BODY" ]; then pass "$2"; else fail "$2 -> expected empty body, got [$BODY]"; fi
+    if [ -z "$BODY" ]; then pass "$1"; else fail "$1 -> expected empty body, got [$BODY]"; fi
 }
 
 # --- the checks -----------------------------------------------------------
