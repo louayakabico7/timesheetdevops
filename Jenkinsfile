@@ -242,6 +242,26 @@ EOF
                 sh 'sh acceptance/acceptance-tests.sh chap4-khadijabenjaafar-prod timesheet-service 30010'
             }
         }
+        stage('Config Safety Check') {
+            steps {
+                // class practice "Configuration Safety Checks": the LIVE config of both
+                // environments must match what this git repo declares (image, replicas,
+                // nodePorts, exposed services, secrets present)
+                sh 'sh scripts/config-safety-check.sh ${IMAGE_NAME}:${IMAGE_TAG} chap4-khadijabenjaafar-4nids3 chap4-khadijabenjaafar-prod'
+            }
+        }
+        stage('Security Smoke Test (ZAP)') {
+            steps {
+                // class practice "Security Smoke Tests": ZAP Baseline against the
+                // RELEASED production app, right after release
+                sh 'sh scripts/zap-scan.sh chap4-khadijabenjaafar-prod timesheet-service 30011 zap-report-prod.html'
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'zap-report-prod.html', allowEmptyArchive: true
+                }
+            }
+        }
         stage('Operation') {
             steps {
                 // operational readiness of the RUNNING system:
@@ -288,7 +308,8 @@ Commit        : ${GIT_HEAD}
 Approved by   : ${APPROVED_BY:-not recorded}
 Image         : ${IMAGE_NAME}:${IMAGE_TAG}
 Security gates: gitleaks (secrets), semgrep (SAST), dependency-check (NVD CVE),
-                sonarqube (quality), ZAP (DAST), trivy (image CVE), acceptance (business)
+                sonarqube (quality), ZAP (DAST), trivy (image CVE), acceptance (business),
+                config safety (drift), ZAP smoke (production)
 ------------------------------------------------------------------
 Latest commits:
 EOF
