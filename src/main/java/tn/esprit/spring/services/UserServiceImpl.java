@@ -16,6 +16,9 @@ public class UserServiceImpl implements IUserService {
 	@Autowired
 	UserRepository userRepository;
 
+	@Autowired
+	AuditService auditService;
+
 
 
 	private static final Logger l = LogManager.getLogger(UserServiceImpl.class);
@@ -34,7 +37,11 @@ public class UserServiceImpl implements IUserService {
 
 		try {
 			// TODO Log à ajouter en début de la méthode 
-			utilisateur = userRepository.save(u); 
+			utilisateur = userRepository.save(u);
+			if (utilisateur != null) {
+				auditService.record("User", String.valueOf(utilisateur.getId()), "CREATE",
+						"lastName=" + utilisateur.getLastName());
+			} 
 			// TODO Log à ajouter à la fin de la méthode 
 
 		} catch (Exception e) {
@@ -53,7 +60,11 @@ public class UserServiceImpl implements IUserService {
 		
 		try {
 			// TODO Log à ajouter en début de la méthode 
-			userUpdated = userRepository.save(u); 
+			userUpdated = userRepository.save(u);
+			if (userUpdated != null) {
+				auditService.record("User", String.valueOf(userUpdated.getId()), "UPDATE",
+						"lastName=" + userUpdated.getLastName());
+			} 
 			// TODO Log à ajouter à la fin de la méthode 
 
 		} catch (Exception e) {
@@ -68,7 +79,8 @@ public class UserServiceImpl implements IUserService {
 
 		try {
 			// TODO Log à ajouter en début de la méthode 
-			userRepository.deleteById(Long.parseLong(id)); 
+			userRepository.deleteById(Long.parseLong(id));
+			auditService.record("User", id, "DELETE", "user removed"); 
 			// TODO Log à ajouter à la fin de la méthode 
 
 		} catch (Exception e) {

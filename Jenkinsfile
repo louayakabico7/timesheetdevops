@@ -49,6 +49,7 @@ pipeline {
         stage('Test') {
             steps {
                 sh 'mvn test'
+                junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
             }
         }
         stage('OWASP Dependency-Check') {
@@ -102,6 +103,24 @@ EOF
         stage('Docker Build') {
             steps {
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+        stage('Image Threat Intel (Trivy)') {
+            steps {
+                // CVE threat intel for the artifact about to ship (OS packages + jar dependencies).
+                // Scans a docker-save tarball, so the Docker socket stays unmounted.
+                // Report-only: change --exit-code 0 -> 1 to block HIGH/CRITICAL once the base image is patched.
+                sh '''
+                    set -e
+                    VOL=$(docker inspect jenkins --format '{{range .Mounts}}{{if eq .Destination "/var/jenkins_home"}}{{.Name}}{{end}}{{end}}')
+                    docker save -o scan-image.tar ${IMAGE_NAME}:${IMAGE_TAG}
+                    trap 'rm -f "$WORKSPACE/scan-image.tar"' EXIT
+                    mkdir -p /var/jenkins_home/.trivy-cache && chmod 777 /var/jenkins_home/.trivy-cache
+                    docker run --rm --mount type=volume,src=$VOL,dst=/var/jenkins_home -w "$WORKSPACE" \
+                        -e TRIVY_CACHE_DIR=/var/jenkins_home/.trivy-cache \
+                        aquasec/trivy:0.75.0 image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+                        --no-progress --exit-code 0 --input scan-image.tar
+                '''
             }
         }
         stage('Docker Push') {
@@ -186,9 +205,17 @@ EOF
             steps {
                 // automated acceptance: business behaviour of the DEPLOYED staging app
                 sh 'sh acceptance/acceptance-tests.sh chap4-khadijabenjaafar-4nids3 timesheet-service 30009'
-                // human sign-off: nothing reaches production without it
+                // human sign-off: nothing reaches production without it; also record WHO approved
                 timeout(time: 15, unit: 'MINUTES') {
-                    input message: "Acceptance sign-off: promote build #${BUILD_NUMBER} to production?", ok: 'Accept for production'
+                    script {
+                        input message: "Acceptance sign-off: promote build #${BUILD_NUMBER} to production?", ok: 'Accept for production'
+                        try {
+                            def actions = run.getActions(org.jenkinsci.plugins.workflow.support.steps.input.InputAction)
+                            env.APPROVED_BY = (actions && actions[0].origin) ? actions[0].origin.toString() : 'unknown'
+                        } catch (Exception ignored) {
+                            env.APPROVED_BY = 'unknown (see console: Approved by ...)'
+                        }
+                    }
                 }
             }
         }
@@ -241,6 +268,39 @@ EOF
                 '''
             }
         }
+        stage('Audit Trail') {
+            steps {
+                script {
+                    env.BUILD_STATUS = currentBuild.currentResult
+                    def causes = currentBuild.getBuildCauses()
+                    env.BUILD_TRIGGER = causes ? causes[0].shortDescription.toString() : 'unknown'
+                    env.GIT_HEAD = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                }
+                // evidence bundle for the acceptance review (archived in post actions)
+                sh '''
+                    cat > audit-trail.txt <<EOF
+==================================================================
+ AUDIT TRAIL - ${JOB_NAME} #${BUILD_NUMBER}
+==================================================================
+Result        : ${BUILD_STATUS}
+Triggered by  : ${BUILD_TRIGGER}
+Commit        : ${GIT_HEAD}
+Approved by   : ${APPROVED_BY:-not recorded}
+Image         : ${IMAGE_NAME}:${IMAGE_TAG}
+Security gates: gitleaks (secrets), semgrep (SAST), dependency-check (NVD CVE),
+                sonarqube (quality), ZAP (DAST), trivy (image CVE), acceptance (business)
+------------------------------------------------------------------
+Latest commits:
+EOF
+                    git log --oneline -5 >> audit-trail.txt
+                    git diff --stat HEAD~1..HEAD >> audit-trail.txt 2>/dev/null || echo 'first commit - no diff available' >> audit-trail.txt
+                    echo '------------------------------------------------------------------' >> audit-trail.txt
+                    echo 'Archived evidence : zap-report.html, dependency-check-report.html, test report' >> audit-trail.txt
+                    echo 'App audit table   : T_AUDIT_LOG (one row per create/update/delete)' >> audit-trail.txt
+                    cat audit-trail.txt
+                '''
+            }
+        }
     }
     post {
         success {
@@ -273,6 +333,9 @@ EOF
         }
         always {
             echo 'Post Actions completed.'
+            // evidence for EVERY outcome, even when a stage failed before Audit Trail ran
+            sh 'test -f audit-trail.txt || echo "build ${BUILD_NUMBER} did not reach the Audit Trail stage - see console log" > audit-trail.txt'
+            archiveArtifacts artifacts: 'audit-trail.txt, zap-report.html, target/dependency-check-report.html', allowEmptyArchive: true
             // versions:set modified pom.xml; restore it so the next checkout stays clean
             sh 'git checkout -- pom.xml || true'
         }
