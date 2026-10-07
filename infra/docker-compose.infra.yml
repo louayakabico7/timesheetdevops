@@ -49,6 +49,21 @@ services:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    restart: unless-stopped
+
+  # kubectl port-forward sidecar: exposes the k8s app to the compose network
+  # (Docker Desktop does not publish k8s NodePorts to the host)
+  kube-forward:
+    image: bitnami/kubectl:latest
+    container_name: kube-forward
+    user: "0:0"
+    environment:
+      - KUBECONFIG=/kube/.kube/config
+    volumes:
+      - jenkins_home:/kube:ro
+    command: ["port-forward", "--address=0.0.0.0", "svc/timesheet-service", "30007:8080", "-n", "louaysalim5nids3"]
     restart: unless-stopped
 
 volumes:

@@ -4,6 +4,19 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+
+  # Jenkins pipeline metrics (Prometheus Metrics plugin, collects every 120s)
   - job_name: 'jenkins'
+    metrics_path: '/prometheus/'
+    basic_auth:
+      username: 'admin'
+      password: 'louaysalim'
     static_configs:
       - targets: ['jenkins:8080']
+
+  # Timesheet application (Spring Boot Actuator) - reached through the
+  # kube-forward sidecar (Docker Desktop does not publish k8s NodePorts)
+  - job_name: 'timesheet-app'
+    metrics_path: '/timesheet-devops/actuator/prometheus'
+    static_configs:
+      - targets: ['kube-forward:30007']
